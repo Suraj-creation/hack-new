@@ -8,9 +8,9 @@ import SchemesModule from './components/Modules/SchemesModule';
 import GrievanceModule from './components/Modules/GrievanceModule';
 import SkillsModule from './components/Modules/SkillsModule';
 import WellbeingModule from './components/Modules/WellbeingModule';
+import AdminModule from './components/Modules/AdminModule';
 import OnboardingFlow from './components/Onboarding/OnboardingFlow';
-import { liveService, ConnectionStatus } from './services/liveService';
-import { saathiCore, EmotionalState } from './services/saathiCore';
+import { saathiCore, EmotionalState, ConnectionStatus, SaathiAction } from './services/saathiCore';
 
 const App: React.FC = () => {
   const [currentScreen, setCurrentScreen] = useState<ActiveTab>('home');
@@ -20,12 +20,20 @@ const App: React.FC = () => {
     id: '123',
     name: 'Ramesh Singh',
     village: 'Piparia',
+    block: 'Ashta',
     district: 'Sehore',
     state: 'Madhya Pradesh',
     preferredLanguage: 'hi-IN',
     uiMode: UIMode.STANDARD,
     daysWorked: 45,
-    onboardingLevel: 'verified'
+    onboardingLevel: 3,
+    aadhaarLinked: true,
+    phoneNumber: '9876543210',
+    isLiterate: true,
+    bankAccountLinked: true,
+    registeredSchemes: ['mgnrega', 'pmjdy'],
+    pendingPayments: 2880,
+    lastActiveDate: new Date().toISOString()
   });
 
   const [isSathiActive, setIsSathiActive] = useState(false);
@@ -98,7 +106,8 @@ const App: React.FC = () => {
     setConnectionStatus('connecting');
     wakeWordRecognitionRef.current?.stop();
 
-    const session = await liveService.connect({
+    // Use unified saathiCore for everything
+    const session = await saathiCore.connect({
       onConnecting: () => {
         setConnectionStatus('connecting');
       },
@@ -106,28 +115,33 @@ const App: React.FC = () => {
         setIsLive(true);
         setConnectionStatus('connected');
       },
-      onTranscription: async (text, isUser) => {
+      onTranscription: (text, isUser) => {
         if (isUser) {
           setUserTranscription(text);
           setIsUserSpeaking(true);
           setIsSpeaking(false);
-          
-          // Process through SAATHI Core for intelligent response
-          const response = await saathiCore.processUserInput(text);
-          setEmotionalState(response.emotion);
-          setSuggestedReplies(response.suggestedReplies || []);
-          
-          // Handle navigation actions
-          response.actions.forEach(action => {
-            if (action.type === 'navigate') {
-              setCurrentScreen(action.payload.screen);
-            }
-          });
         } else {
           setAiTranscription(text);
           setIsUserSpeaking(false);
           setIsSpeaking(true);
         }
+      },
+      onNavigate: (screen: ActiveTab) => {
+        setCurrentScreen(screen);
+        console.log('[APP] Navigation to:', screen);
+      },
+      onActionDetected: (action: SaathiAction) => {
+        console.log('[APP] Action detected:', action.type);
+        if (action.type === 'navigate') {
+          setCurrentScreen(action.payload.screen);
+        }
+      },
+      onEmotionChange: (emotion: EmotionalState) => {
+        setEmotionalState(emotion);
+      },
+      onGrievanceFiled: (grievance) => {
+        console.log('[APP] Grievance filed:', grievance.ticketNo);
+        // Could show toast notification here
       },
       onInterrupted: () => {
         setIsUserSpeaking(true);
@@ -157,7 +171,7 @@ const App: React.FC = () => {
   };
 
   const handleStopLive = () => {
-    liveService.disconnect();
+    saathiCore.disconnect();
     setIsLive(false);
     setIsSathiActive(false);
     setIsSpeaking(false);
@@ -179,6 +193,7 @@ const App: React.FC = () => {
       case 'grievance': return <GrievanceModule uiMode={uiMode} />;
       case 'skills': return <SkillsModule uiMode={uiMode} />;
       case 'wellbeing': return <WellbeingModule uiMode={uiMode} />;
+      case 'admin': return <AdminModule />;
       default: return <HomeModule user={user} uiMode={uiMode} onTabChange={setCurrentScreen} />;
     }
   };
@@ -211,6 +226,18 @@ const App: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
             {isLive && <span className="flex h-2 w-2 rounded-full bg-blue-600 animate-ping"></span>}
+            <button 
+              onClick={() => handleNavigate('admin')}
+              className={`px-3 py-1 md:px-4 md:py-1.5 rounded-full text-[10px] md:text-xs font-bold transition-all ${
+                currentScreen === 'admin' 
+                  ? 'bg-orange-600 text-white' 
+                  : uiMode === UIMode.HIGH_CONTRAST 
+                    ? 'border-2 border-yellow-400' 
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 active:bg-slate-300'
+              }`}
+            >
+              🛡️ ADMIN
+            </button>
             <button 
               onClick={() => setUiMode(uiMode === UIMode.STANDARD ? UIMode.PICTURE : UIMode.STANDARD)}
               className={`px-3 py-1 md:px-4 md:py-1.5 rounded-full text-[10px] md:text-xs font-bold transition-all ${uiMode === UIMode.HIGH_CONTRAST ? 'border-2 border-yellow-400' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 active:bg-slate-300'}`}

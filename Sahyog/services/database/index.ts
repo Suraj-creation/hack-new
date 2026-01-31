@@ -9,6 +9,12 @@ export { mongoService, dbConfig, type MongoDBConfig, type DBResponse } from './m
 // Schemas
 export * from './schemas';
 
+// ML Database Schemas
+export * from './mlSchemas';
+
+// Dummy Data Generator
+export * from './dummyDataGenerator';
+
 // Data Collector
 export { 
   DataCollectorService, 

@@ -134,9 +134,21 @@ export class GrievanceService {
     );
   }
 
+  // Get all grievances (for admin panel)
+  getAllGrievances(): Grievance[] {
+    return this.grievances.sort((a, b) => 
+      new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+  }
+
   // Get grievance by ticket number
   getByTicketNo(ticketNo: string): Grievance | undefined {
     return this.grievances.find(g => g.ticketNo === ticketNo);
+  }
+
+  // Get grievance by ID
+  getById(id: string): Grievance | undefined {
+    return this.grievances.find(g => g.id === id);
   }
 
   // Get grievance statistics

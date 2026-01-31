@@ -6,7 +6,7 @@ export enum UIMode {
 }
 
 // Active Tab / Screen Types
-export type ActiveTab = 'home' | 'work' | 'schemes' | 'grievance' | 'skills' | 'wellbeing';
+export type ActiveTab = 'home' | 'work' | 'schemes' | 'grievance' | 'skills' | 'wellbeing' | 'admin';
 
 export type OnboardingLevel = 0 | 1 | 2 | 3 | 'verified';
 

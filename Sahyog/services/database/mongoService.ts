@@ -199,6 +199,45 @@ class MongoDBService {
   }
 
   /**
+   * Count documents matching query
+   */
+  async count(collection: string, query: Record<string, any> = {}): Promise<number> {
+    try {
+      await this.connect();
+      const data = this.getLocalCollection(collection);
+      
+      if (Object.keys(query).length === 0) {
+        return data.length;
+      }
+      
+      const matchedDocs = data.filter((doc: any) => {
+        return Object.entries(query).every(([key, value]) => {
+          if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+            // Handle operators
+            return Object.entries(value).every(([op, opVal]) => {
+              switch (op) {
+                case '$gte': return doc[key] >= opVal;
+                case '$gt': return doc[key] > opVal;
+                case '$lte': return doc[key] <= opVal;
+                case '$lt': return doc[key] < opVal;
+                case '$in': return (opVal as any[]).includes(doc[key]);
+                case '$ne': return doc[key] !== opVal;
+                default: return false;
+              }
+            });
+          }
+          return doc[key] === value;
+        });
+      });
+      
+      return matchedDocs.length;
+    } catch (error) {
+      console.error('Count error:', error);
+      return 0;
+    }
+  }
+
+  /**
    * Delete a document
    */
   async deleteOne(collection: string, query: Record<string, any>): Promise<DBResponse> {

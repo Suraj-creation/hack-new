@@ -208,6 +208,11 @@ const QuickActions: React.FC<{
       { icon: 'fa-hospital', label: 'Health', labelHindi: 'स्वास्थ्य', command: 'डॉक्टर से मिलना है' },
       { icon: 'fa-hands-helping', label: 'Help', labelHindi: 'मदद', command: 'मुझे मदद चाहिए' },
     ],
+    admin: [
+      { icon: 'fa-database', label: 'Data', labelHindi: 'डेटा', command: 'डेटा दिखाओ' },
+      { icon: 'fa-chart-bar', label: 'Analytics', labelHindi: 'विश्लेषण', command: 'विश्लेषण दिखाओ' },
+      { icon: 'fa-cogs', label: 'Settings', labelHindi: 'सेटिंग्स', command: 'सेटिंग्स खोलो' },
+    ],
   };
 
   const actions = quickActions[currentScreen] || quickActions.home;

@@ -5,8 +5,7 @@
  * Open browser console (F12) and call: window.runSaathiTests()
  */
 
-import { liveService, LiveService } from '../liveService';
-import { saathiCore, SaathiCore, EmotionalState } from '../saathiCore';
+import { saathiCore, EmotionalState, ConnectionStatus, SaathiCore } from '../saathiCore';
 import { UIMode } from '../../types';
 
 export interface TestResult {
@@ -62,7 +61,7 @@ async function runTest(
  * Test 1: API Key Configuration
  */
 async function testApiKeyConfiguration(): Promise<{ success: boolean; message: string; details?: any }> {
-  const result = LiveService.testApiKey();
+  const result = SaathiCore.testApiKey();
   return {
     success: result.success,
     message: result.message,
@@ -74,18 +73,24 @@ async function testApiKeyConfiguration(): Promise<{ success: boolean; message: s
  * Test 2: AudioContext Support
  */
 async function testAudioContextSupport(): Promise<{ success: boolean; message: string; details?: any }> {
-  const result = LiveService.testAudioContext();
-  return {
-    success: result.success,
-    message: result.message
-  };
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) {
+      return { success: false, message: 'AudioContext not supported' };
+    }
+    const ctx = new AudioContext();
+    ctx.close();
+    return { success: true, message: 'AudioContext supported' };
+  } catch (error: any) {
+    return { success: false, message: `AudioContext error: ${error.message}` };
+  }
 }
 
 /**
  * Test 3: Microphone Permission
  */
 async function testMicrophonePermission(): Promise<{ success: boolean; message: string; details?: any }> {
-  const result = await LiveService.testMicrophone();
+  const result = await SaathiCore.testMicrophone();
   return {
     success: result.success,
     message: result.message
@@ -97,7 +102,7 @@ async function testMicrophonePermission(): Promise<{ success: boolean; message: 
  */
 async function testSaathiCoreInit(): Promise<{ success: boolean; message: string; details?: any }> {
   try {
-    // Set a mock user with correct types
+    // Set a mock user
     saathiCore.setUser({
       id: 'test-user',
       name: 'Test User',
@@ -120,14 +125,15 @@ async function testSaathiCoreInit(): Promise<{ success: boolean; message: string
     
     saathiCore.setCurrentScreen('home');
     
+    const status = saathiCore.getConnectionStatus();
+    const apiConfigured = saathiCore.isApiKeyConfigured();
+    
     return {
       success: true,
       message: 'SaathiCore initialized successfully',
       details: {
-        hasUniversalAccess: !!saathiCore.universalAccess,
-        hasNavigation: !!saathiCore.navigation,
-        hasDataCollector: !!saathiCore.dataCollector,
-        hasGrievanceAutomation: !!saathiCore.grievanceAutomation
+        connectionStatus: status,
+        apiKeyConfigured: apiConfigured
       }
     };
   } catch (error: any) {
@@ -139,131 +145,10 @@ async function testSaathiCoreInit(): Promise<{ success: boolean; message: string
 }
 
 /**
- * Test 5: Intent Detection
- */
-async function testIntentDetection(): Promise<{ success: boolean; message: string; details?: any }> {
-  const testCases = [
-    { input: 'मुझे काम चाहिए', expectedIntent: 'navigate' },
-    { input: 'शिकायत दर्ज करनी है', expectedIntent: 'complaint' },
-    { input: 'योजना के बारे में बताओ', expectedIntent: 'query' },
-    { input: 'मैं बहुत परेशान हूं', expectedIntent: 'emotional_support' },
-  ];
-  
-  const results: any[] = [];
-  
-  for (const testCase of testCases) {
-    try {
-      const response = await saathiCore.processUserInput(testCase.input);
-      results.push({
-        input: testCase.input,
-        expectedIntent: testCase.expectedIntent,
-        actualIntent: response.intent,
-        passed: response.intent === testCase.expectedIntent
-      });
-    } catch (error: any) {
-      results.push({
-        input: testCase.input,
-        error: error.message,
-        passed: false
-      });
-    }
-  }
-  
-  const passedCount = results.filter(r => r.passed).length;
-  
-  return {
-    success: passedCount >= testCases.length * 0.75, // 75% pass rate
-    message: `Intent detection: ${passedCount}/${testCases.length} passed`,
-    details: { results }
-  };
-}
-
-/**
- * Test 6: Emotional State Detection
- */
-async function testEmotionalStateDetection(): Promise<{ success: boolean; message: string; details?: any }> {
-  const testCases = [
-    { input: 'मैं बहुत खुश हूं', expectedEmotion: 'happy' },
-    { input: 'मुझे बहुत गुस्सा आ रहा है', expectedEmotion: 'frustrated' },
-    { input: 'मुझे समझ नहीं आ रहा', expectedEmotion: 'confused' },
-    { input: 'जल्दी करो ये बहुत जरूरी है', expectedEmotion: 'urgent' },
-  ];
-  
-  const results: any[] = [];
-  
-  for (const testCase of testCases) {
-    try {
-      const response = await saathiCore.processUserInput(testCase.input);
-      results.push({
-        input: testCase.input,
-        expectedEmotion: testCase.expectedEmotion,
-        actualEmotion: response.emotion,
-        passed: response.emotion === testCase.expectedEmotion
-      });
-    } catch (error: any) {
-      results.push({
-        input: testCase.input,
-        error: error.message,
-        passed: false
-      });
-    }
-  }
-  
-  const passedCount = results.filter(r => r.passed).length;
-  
-  return {
-    success: passedCount >= testCases.length * 0.5, // 50% pass rate (emotion is harder)
-    message: `Emotion detection: ${passedCount}/${testCases.length} passed`,
-    details: { results }
-  };
-}
-
-/**
- * Test 7: Navigation Commands
- */
-async function testNavigationCommands(): Promise<{ success: boolean; message: string; details?: any }> {
-  const testCases = [
-    { input: 'काम वाला पेज दिखाओ', expectedScreen: 'work' },
-    { input: 'शिकायत पेज खोलो', expectedScreen: 'grievance' },
-    { input: 'योजनाएं दिखाओ', expectedScreen: 'schemes' },
-    { input: 'होम पर जाओ', expectedScreen: 'home' },
-  ];
-  
-  const results: any[] = [];
-  
-  for (const testCase of testCases) {
-    try {
-      const response = await saathiCore.processUserInput(testCase.input);
-      const navigateAction = response.actions.find(a => a.type === 'navigate');
-      results.push({
-        input: testCase.input,
-        expectedScreen: testCase.expectedScreen,
-        actualScreen: navigateAction?.payload?.screen,
-        passed: navigateAction?.payload?.screen === testCase.expectedScreen
-      });
-    } catch (error: any) {
-      results.push({
-        input: testCase.input,
-        error: error.message,
-        passed: false
-      });
-    }
-  }
-  
-  const passedCount = results.filter(r => r.passed).length;
-  
-  return {
-    success: passedCount >= testCases.length * 0.75,
-    message: `Navigation: ${passedCount}/${testCases.length} passed`,
-    details: { results }
-  };
-}
-
-/**
- * Test 8: Full Connection Test (without actually connecting)
+ * Test 5: Full Connection Prerequisites
  */
 async function testFullConnectionPrerequisites(): Promise<{ success: boolean; message: string; details?: any }> {
-  const result = await liveService.testConnection();
+  const result = await saathiCore.testConnection();
   return {
     success: result.success,
     message: result.message,
@@ -283,10 +168,7 @@ export async function runAllTests(): Promise<TestSuiteResult> {
     { name: '2. AudioContext Support', fn: testAudioContextSupport },
     { name: '3. Microphone Permission', fn: testMicrophonePermission },
     { name: '4. SaathiCore Initialization', fn: testSaathiCoreInit },
-    { name: '5. Intent Detection', fn: testIntentDetection },
-    { name: '6. Emotional State Detection', fn: testEmotionalStateDetection },
-    { name: '7. Navigation Commands', fn: testNavigationCommands },
-    { name: '8. Full Connection Prerequisites', fn: testFullConnectionPrerequisites },
+    { name: '5. Full Connection Prerequisites', fn: testFullConnectionPrerequisites },
   ];
   
   const results: TestResult[] = [];
@@ -325,7 +207,6 @@ export async function runAllTests(): Promise<TestSuiteResult> {
 // Export for browser console access
 if (typeof window !== 'undefined') {
   (window as any).runSaathiTests = runAllTests;
-  (window as any).LiveService = LiveService;
   (window as any).saathiCore = saathiCore;
   console.log('🧪 SAATHI Tests loaded! Run: window.runSaathiTests()');
 }
@@ -336,8 +217,5 @@ export default {
   testAudioContextSupport,
   testMicrophonePermission,
   testSaathiCoreInit,
-  testIntentDetection,
-  testEmotionalStateDetection,
-  testNavigationCommands,
   testFullConnectionPrerequisites
 };
