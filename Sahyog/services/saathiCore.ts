@@ -259,7 +259,7 @@ export class SaathiCore {
     console.log('[SAATHI] 🔄 Starting unified connection...');
 
     if (!API_KEY) {
-      const error = new Error('API key not configured. Set VITE_GEMINI_API_KEY in .env.local');
+      const error = new Error('❌ Gemini API key not found!\n\n📝 Please create .env.local file in Sahyog folder with:\nVITE_GEMINI_API_KEY=your_api_key\n\n🔑 Get your key from: https://aistudio.google.com/app/apikey');
       console.error('[SAATHI] ❌', error.message);
       this.connectionStatus = 'error';
       callbacks.onError?.(error);
@@ -268,21 +268,42 @@ export class SaathiCore {
 
     // Initialize AI client lazily
     if (!this.initializeAI()) {
-      const error = new Error('Failed to initialize AI client');
+      const error = new Error('Failed to initialize Gemini AI client. Check API key validity.');
       this.connectionStatus = 'error';
       callbacks.onError?.(error);
       return null;
     }
 
     try {
+      // Check for microphone permission
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Your browser does not support microphone access. Please use Chrome, Edge, or Safari.');
+      }
+
       // Request microphone
       console.log('[SAATHI] 🎤 Requesting microphone...');
-      this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      this.stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        } 
+      });
       console.log('[SAATHI] ✅ Microphone granted');
 
       // Initialize audio contexts
       this.inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       this.outputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+
+      // Resume audio contexts (required by browsers for user interaction)
+      if (this.inputAudioContext.state === 'suspended') {
+        await this.inputAudioContext.resume();
+        console.log('[SAATHI] 🔊 Input audio context resumed');
+      }
+      if (this.outputAudioContext.state === 'suspended') {
+        await this.outputAudioContext.resume();
+        console.log('[SAATHI] 🔊 Output audio context resumed');
+      }
 
       console.log('[SAATHI] 🌐 Connecting to Gemini Live API...');
 
@@ -337,13 +358,45 @@ export class SaathiCore {
       });
 
       this.session = await sessionPromise;
-      console.log('[SAATHI] ✅ Session established');
+      
+      if (!this.session) {
+        throw new Error('Failed to establish Gemini Live session');
+      }
+      
+      console.log('[SAATHI] ✅ Session established successfully');
       return this.session;
 
     } catch (error: any) {
       console.error('[SAATHI] ❌ Connection failed:', error);
       this.connectionStatus = 'error';
-      callbacks.onError?.(error);
+      
+      // Cleanup on error
+      if (this.stream) {
+        this.stream.getTracks().forEach(t => t.stop());
+        this.stream = null;
+      }
+      if (this.inputAudioContext) {
+        try { this.inputAudioContext.close(); } catch (e) {}
+        this.inputAudioContext = null;
+      }
+      if (this.outputAudioContext) {
+        try { this.outputAudioContext.close(); } catch (e) {}
+        this.outputAudioContext = null;
+      }
+      
+      // Provide user-friendly error message
+      let userMessage = error.message;
+      if (error.name === 'NotAllowedError') {
+        userMessage = '🎤 Microphone permission denied. Please allow microphone access and try again.';
+      } else if (error.name === 'NotFoundError') {
+        userMessage = '🎤 No microphone found. Please connect a microphone and try again.';
+      } else if (error.message?.includes('API key')) {
+        // Keep the API key error as is (already user-friendly)
+      } else {
+        userMessage = `Connection failed: ${error.message || 'Unknown error'}`;
+      }
+      
+      callbacks.onError?.(new Error(userMessage));
       return null;
     }
   }

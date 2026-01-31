@@ -11,6 +11,7 @@ import WellbeingModule from './components/Modules/WellbeingModule';
 import AdminModule from './components/Modules/AdminModule';
 import OnboardingFlow from './components/Onboarding/OnboardingFlow';
 import { saathiCore, EmotionalState, ConnectionStatus, SaathiAction } from './services/saathiCore';
+import { logSetupStatus } from './services/configChecker';
 
 const App: React.FC = () => {
   const [currentScreen, setCurrentScreen] = useState<ActiveTab>('home');
@@ -47,6 +48,11 @@ const App: React.FC = () => {
   const [emotionalState, setEmotionalState] = useState<EmotionalState>('neutral');
   const [suggestedReplies, setSuggestedReplies] = useState<string[]>([]);
   const wakeWordRecognitionRef = useRef<any>(null);
+
+  // Log setup status on mount
+  useEffect(() => {
+    logSetupStatus();
+  }, []);
 
   // Initialize SAATHI Core with user
   useEffect(() => {
@@ -149,9 +155,17 @@ const App: React.FC = () => {
       },
       onError: (error) => {
         console.error('[SAATHI] Connection error:', error);
-        setConnectionError(error.message);
+        const errorMsg = error.message || 'Unknown connection error';
+        setConnectionError(errorMsg);
         setConnectionStatus('error');
         setIsLive(false);
+        setIsSathiActive(false);
+        
+        // Show error for 5 seconds then allow retry
+        setTimeout(() => {
+          setConnectionError(null);
+          startWakeWordListener();
+        }, 5000);
       },
       onClose: () => {
         setIsLive(false);

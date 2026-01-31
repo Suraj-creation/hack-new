@@ -492,9 +492,22 @@ export const SaathiConversationalUI: React.FC<SaathiConversationalUIProps> = ({
 
       {/* Connection Error Banner */}
       {connectionError && (
-        <div className="bg-red-500 text-white px-4 py-2 text-center text-sm">
-          <i className="fas fa-exclamation-triangle mr-2" />
-          {connectionError}
+        <div className="bg-red-500 text-white px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 flex-1">
+              <i className="fas fa-exclamation-triangle text-lg" />
+              <div className="text-sm">
+                <div className="font-bold">Connection Error</div>
+                <div className="text-xs opacity-90 whitespace-pre-line">{connectionError}</div>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded text-xs font-medium"
+            >
+              Close
+            </button>
+          </div>
         </div>
       )}
 
