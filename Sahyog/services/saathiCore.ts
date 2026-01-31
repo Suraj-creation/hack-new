@@ -301,11 +301,27 @@ export class SaathiCore {
           onclose: () => {
             console.log('[SAATHI] 🔴 Connection closed');
             this.connectionStatus = 'disconnected';
+            
+            // Cleanup audio processing when connection closes
+            if (this.scriptProcessor) {
+              this.scriptProcessor.onaudioprocess = null;
+              this.scriptProcessor.disconnect();
+              this.scriptProcessor = null;
+            }
+            
             callbacks.onClose?.();
           },
           onerror: (e: any) => {
             console.error('[SAATHI] ❌ API Error:', e);
             this.connectionStatus = 'error';
+            
+            // Cleanup audio processing on error
+            if (this.scriptProcessor) {
+              this.scriptProcessor.onaudioprocess = null;
+              this.scriptProcessor.disconnect();
+              this.scriptProcessor = null;
+            }
+            
             callbacks.onError?.(new Error(e?.message || 'Unknown error'));
           }
         },
@@ -334,19 +350,60 @@ export class SaathiCore {
 
   disconnect(): void {
     console.log('[SAATHI] 🔌 Disconnecting...');
-    this.stopAllAudio();
-    this.scriptProcessor?.disconnect();
-    this.stream?.getTracks().forEach(t => t.stop());
-    this.session?.close();
-    this.inputAudioContext?.close();
-    this.outputAudioContext?.close();
-    this.session = null;
-    this.inputAudioContext = null;
-    this.outputAudioContext = null;
-    this.stream = null;
+    
+    // Mark as disconnecting to stop audio processing
     this.connectionStatus = 'disconnected';
+    
+    // Stop all audio sources
+    this.stopAllAudio();
+    
+    // Disconnect and cleanup audio processor
+    if (this.scriptProcessor) {
+      this.scriptProcessor.onaudioprocess = null; // Remove handler to prevent further processing
+      this.scriptProcessor.disconnect();
+      this.scriptProcessor = null;
+    }
+    
+    // Stop all media tracks
+    this.stream?.getTracks().forEach(t => t.stop());
+    
+    // Close session
+    if (this.session) {
+      try {
+        this.session.close();
+      } catch (e) {
+        console.warn('[SAATHI] Session close warning:', e);
+      }
+      this.session = null;
+    }
+    
+    // Close audio contexts
+    if (this.inputAudioContext) {
+      try {
+        this.inputAudioContext.close();
+      } catch (e) {
+        console.warn('[SAATHI] Input audio context close warning:', e);
+      }
+      this.inputAudioContext = null;
+    }
+    
+    if (this.outputAudioContext) {
+      try {
+        this.outputAudioContext.close();
+      } catch (e) {
+        console.warn('[SAATHI] Output audio context close warning:', e);
+      }
+      this.outputAudioContext = null;
+    }
+    
+    this.stream = null;
     this.lastProcessedText = '';
-    if (this.processingTimeout) clearTimeout(this.processingTimeout);
+    
+    if (this.processingTimeout) {
+      clearTimeout(this.processingTimeout);
+      this.processingTimeout = null;
+    }
+    
     console.log('[SAATHI] ✅ Disconnected');
   }
 
@@ -364,9 +421,32 @@ export class SaathiCore {
     this.scriptProcessor = this.inputAudioContext.createScriptProcessor(4096, 1, 1);
 
     this.scriptProcessor.onaudioprocess = (e) => {
-      const inputData = e.inputBuffer.getChannelData(0);
-      const pcmBlob = this.createBlob(inputData);
-      sessionPromise.then(s => s.sendRealtimeInput({ media: pcmBlob }));
+      // Check if still connected before processing
+      if (this.connectionStatus !== 'connected' || !this.session) {
+        return; // Skip processing if disconnected
+      }
+
+      try {
+        const inputData = e.inputBuffer.getChannelData(0);
+        const pcmBlob = this.createBlob(inputData);
+        
+        sessionPromise.then(session => {
+          // Double-check session is still valid before sending
+          if (session && this.connectionStatus === 'connected') {
+            session.sendRealtimeInput({ media: pcmBlob });
+          }
+        }).catch(err => {
+          // Silently handle errors after disconnect
+          if (this.connectionStatus === 'connected') {
+            console.error('[SAATHI] Audio send error:', err);
+          }
+        });
+      } catch (error) {
+        // Only log if we're still supposed to be connected
+        if (this.connectionStatus === 'connected') {
+          console.error('[SAATHI] Audio processing error:', error);
+        }
+      }
     };
 
     source.connect(this.scriptProcessor);
